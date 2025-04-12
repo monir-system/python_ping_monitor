@@ -43,7 +43,7 @@ def ping_host(host, log_file, log_entries):
 
     try:
         output = subprocess.run(["ping", param, "1", host], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        status = "Online ✅" if output.returncode == 0 else "Offline ❌"
+        status = "Online ✅" if "TTL=" in output.stdout or "ttl=" in output.stdout or "bytes from" in output.stdout else "Offline ❌"
     except Exception as e:
         status = f"Error: {e}"
 
