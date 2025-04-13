@@ -32,7 +32,7 @@ def send_email(log_entries):
             server.starttls()  # Secure connection
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.send_message(msg)
-        print("\n📧 Email sent successfully!")
+        print("\n📧 Email sent successfully! testing 123")
     except Exception as e:
         print(f"\n⚠️ Failed to send email: {e}")
 
