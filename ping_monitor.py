@@ -69,3 +69,36 @@ def dashboard():
 
 if __name__ == "__main__":
     app.run(debug=True)
+    try:
+        output = subprocess.run(["ping", param, "1", host], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        status = "Online ✅" if "TTL=" in output.stdout or "ttl=" in output.stdout or "bytes from" in output.stdout else "Offline ❌"
+    except Exception as e:
+        status = f"Error: {e}"
+
+    log_entry = f"{datetime.now()} - {host}: {status}"
+    print(log_entry)
+
+    with open(log_file, "a", encoding="utf-8") as file:
+        file.write(log_entry + "\n")
+
+    if "Offline" in status or "Error" in status or "Online" in status:  # log all types for email alert
+        log_entries.append(log_entry)
+
+
+# Get user input
+user_input = input("Enter IP addresses or domain names (separated by commas): ")
+hosts = [host.strip() for host in user_input.split(",")]
+
+# Log file setup
+log_file = "ping_results.log"
+log_entries = []
+
+# Ping each host and collect results
+for host in hosts:
+    ping_host(host, log_file, log_entries)
+
+# Send email if any host is offline
+send_email(log_entries)
+
+print(f"\nResults saved to {log_file}")
+
