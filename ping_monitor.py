@@ -1,13 +1,54 @@
 import threading
+import os
 import subprocess
 import platform
 import time
+import sqlite3
 from datetime import datetime
 from flask import Flask, request, redirect, render_template_string
+
+DB_NAME = "hosts.db"
+print("📁 Using database file at:", os.path.abspath(DB_NAME))
+
+def init_db():
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS hosts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hostname TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+def add_host_to_db(hostname):
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        try:
+            c.execute("INSERT INTO hosts (hostname) VALUES (?)", (hostname,))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            pass  # Host already exists
+
+def get_all_hosts():
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT hostname FROM hosts")
+        return [row[0] for row in c.fetchall()]
 
 app = Flask(__name__)
 
 status_dict = {}
+
+def start_monitoring_all_hosts():
+    for host in get_all_hosts():
+        start_monitoring_for_host(host)
+
+def start_monitoring_for_host(host):
+    if host not in status_dict:
+        status_dict[host] = "Checking..."
+        threading.Thread(target=ping_host, args=(host,), daemon=True).start()
 
 TEMPLATE = """
 <!DOCTYPE html>
@@ -61,44 +102,14 @@ def ping_host(host):
 def dashboard():
     if request.method == "POST":
         new_host = request.form["host"].strip()
-        if new_host and new_host not in status_dict:
-            status_dict[new_host] = "Checking..."
-            threading.Thread(target=ping_host, args=(new_host,), daemon=True).start()
+        if new_host:
+            add_host_to_db(new_host)
+            start_monitoring_for_host(new_host)
         return redirect("/")
     return render_template_string(TEMPLATE, statuses=status_dict, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 if __name__ == "__main__":
+    init_db()
+    print("Current hosts in DB:", get_all_hosts())
+    start_monitoring_all_hosts()
     app.run(debug=True)
-    try:
-        output = subprocess.run(["ping", param, "1", host], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        status = "Online ✅" if "TTL=" in output.stdout or "ttl=" in output.stdout or "bytes from" in output.stdout else "Offline ❌"
-    except Exception as e:
-        status = f"Error: {e}"
-
-    log_entry = f"{datetime.now()} - {host}: {status}"
-    print(log_entry)
-
-    with open(log_file, "a", encoding="utf-8") as file:
-        file.write(log_entry + "\n")
-
-    if "Offline" in status or "Error" in status or "Online" in status:  # log all types for email alert
-        log_entries.append(log_entry)
-
-
-# Get user input
-user_input = input("Enter IP addresses or domain names (separated by commas): ")
-hosts = [host.strip() for host in user_input.split(",")]
-
-# Log file setup
-log_file = "ping_results.log"
-log_entries = []
-
-# Ping each host and collect results
-for host in hosts:
-    ping_host(host, log_file, log_entries)
-
-# Send email if any host is offline
-send_email(log_entries)
-
-print(f"\nResults saved to {log_file}")
-
