@@ -74,11 +74,14 @@ TEMPLATE = """
         <input type="submit" value="Add Host">
     </form>
     {% for host, status in statuses.items() %}
-        <div class="host">
-            <h2>{{ host }}</h2>
-            <p class="{{ 'online' if status == 'Online ✅' else 'offline' }}">{{ status }}</p>
-        </div>
-    {% endfor %}
+    <div class="host">
+        <h2>{{ host }}</h2>
+        <p class="{{ 'online' if status == 'Online ✅' else 'offline' }}">{{ status }}</p>
+        <form method="POST" action="/delete/{{ host }}" onsubmit="return confirm('Are you sure you want to remove {{ host }}?');">
+            <input type="submit" value="Remove 🗑️">
+        </form>
+    </div>
+{% endfor %}
     <p>Last updated: {{ time }}</p>
 </body>
 </html>
@@ -105,8 +108,20 @@ def dashboard():
         if new_host:
             add_host_to_db(new_host)
             start_monitoring_for_host(new_host)
-        return redirect("/")
+        return redirect("/")  # You need this to reload page after adding
     return render_template_string(TEMPLATE, statuses=status_dict, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+@app.route("/delete/<hostname>", methods=["POST"])
+def delete_host(hostname):
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM hosts WHERE hostname = ?", (hostname,))
+        conn.commit()
+
+    # Also remove it from the status dictionary so it disappears
+    status_dict.pop(hostname, None)
+
+    return redirect("/")
 
 if __name__ == "__main__":
     init_db()
