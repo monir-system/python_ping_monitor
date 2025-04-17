@@ -101,6 +101,14 @@ def ping_host(host):
             status_dict[host] = "Error ❌"
         time.sleep(5)
 
+@app.route("/", methods=["GET", "POST"])
+def dashboard():
+    if request.method == "POST":
+        new_host = request.form["host"].strip()
+        if new_host:
+            add_host_to_db(new_host)
+            start_monitoring_for_host(new_host)
+
 @app.route("/delete/<hostname>", methods=["POST"])
 def delete_host(hostname):
     with sqlite3.connect(DB_NAME) as conn:
