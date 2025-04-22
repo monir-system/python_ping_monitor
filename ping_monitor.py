@@ -4,6 +4,7 @@ import subprocess
 import platform
 import time
 import sqlite3
+import wmi
 from datetime import datetime
 from flask import Flask, request, redirect, render_template_string
 
@@ -21,6 +22,27 @@ def init_db():
             )
         """)
         conn.commit()
+
+def get_connected_bluetooth_devices():
+    try:
+        c = wmi.WMI()
+        bt_devices = []
+        for device in c.Win32_PnPEntity():
+            if device.PNPClass == "Bluetooth" and device.Status == "OK":
+                name = device.Name
+                # The MAC might be embedded in the device ID
+                mac = None
+                if device.DeviceID:
+                    parts = device.DeviceID.split("\\")
+                    for part in parts:
+                        if len(part) == 12 and all(c in "0123456789ABCDEF" for c in part.upper()):
+                            mac = ":".join(part[i:i+2] for i in range(0, 12, 2))
+                            break
+                bt_devices.append((name, mac or "Unknown MAC"))
+        return bt_devices if bt_devices else [("None", "No devices connected")]
+    except Exception as e:
+        return [("Error", str(e))]
+
 
 def add_host_to_db(hostname):
     with sqlite3.connect(DB_NAME) as conn:
@@ -82,6 +104,16 @@ TEMPLATE = """
         </form>
     </div>
 {% endfor %}
+
+<h2>🔵 Connected Bluetooth Devices</h2>
+<ul>
+{% for name, mac in bt_devices %}
+    <li>{{ name }} — <code>{{ mac }}</code></li>
+{% else %}
+    <li>No devices connected.</li>
+{% endfor %}
+</ul>
+
     <p>Last updated: {{ time }}</p>
 </body>
 </html>
