@@ -141,7 +141,8 @@ def dashboard():
             add_host_to_db(new_host)
             start_monitoring_for_host(new_host)
         return redirect("/")  # You need this to reload page after adding
-    return render_template_string(TEMPLATE, statuses=status_dict, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    bt_devices = get_connected_bluetooth_devices()
+    return render_template_string(TEMPLATE, statuses=status_dict, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), bt_devices=bt_devices)
 
 @app.route("/delete/<hostname>", methods=["POST"])
 def delete_host(hostname):
