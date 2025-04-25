@@ -1,5 +1,7 @@
+import re
 import threading
 import os
+import re
 import subprocess
 import platform
 import time
@@ -30,14 +32,13 @@ def get_connected_bluetooth_devices():
         for device in c.Win32_PnPEntity():
             if device.PNPClass == "Bluetooth" and device.Status == "OK":
                 name = device.Name
-                # The MAC might be embedded in the device ID
                 mac = None
                 if device.DeviceID:
-                    parts = device.DeviceID.split("\\")
-                    for part in parts:
-                        if len(part) == 12 and all(c in "0123456789ABCDEF" for c in part.upper()):
-                            mac = ":".join(part[i:i+2] for i in range(0, 12, 2))
-                            break
+                    print(f"Device Name: {name}, Device ID: {device.DeviceID}")  # Optional debug
+                    mac_match = re.search(r'([0-9A-F]{12})', device.DeviceID, re.IGNORECASE)
+                    if mac_match:
+                        raw_mac = mac_match.group(1)
+                        mac = ":".join(raw_mac[i:i+2] for i in range(0, 12, 2))
                 bt_devices.append((name, mac or "Unknown MAC"))
         return bt_devices if bt_devices else [("None", "No devices connected")]
     except Exception as e:
