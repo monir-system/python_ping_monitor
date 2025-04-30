@@ -1,17 +1,30 @@
 import re
 import threading
 import os
-import re
 import subprocess
 import platform
 import time
 import sqlite3
 import wmi
+import psutil
+import socket
 from datetime import datetime
 from flask import Flask, request, redirect, render_template_string
 
 DB_NAME = "hosts.db"
 print("📁 Using database file at:", os.path.abspath(DB_NAME))
+
+def get_system_info():
+    boot_time = datetime.fromtimestamp(psutil.boot_time())
+    uptime = datetime.now() - boot_time
+    return {
+        "Hostname": socket.gethostname(),
+        "OS": platform.platform(),
+        "CPU Usage": f"{psutil.cpu_percent(interval=0.5)}%",
+        "RAM Usage": f"{psutil.virtual_memory().percent}%",
+        "Uptime": str(uptime).split('.')[0],  # strip microseconds
+    }
+
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -43,6 +56,7 @@ def get_connected_bluetooth_devices():
         return bt_devices if bt_devices else [("None", "No devices connected")]
     except Exception as e:
         return [("Error", str(e))]
+
 
 
 def add_host_to_db(hostname):
@@ -91,6 +105,15 @@ TEMPLATE = """
     </style>
 </head>
 <body>
+
+<div style="position: absolute; top: 10px; right: 10px; background-color: #222; padding: 1em; border-radius: 10px; text-align: left;">
+    <h3>🖥️ System Info</h3>
+    <ul style="list-style: none; padding-left: 0;">
+    {% for key, value in system_info.items() %}
+        <li><strong>{{ key }}:</strong> {{ value }}</li>
+    {% endfor %}
+    </ul>
+</div>
     <h1>🌐 Ping Monitor Dashboard</h1>
     <form method="POST">
         <input type="text" name="host" placeholder="Enter hostname or IP" required>
@@ -141,9 +164,18 @@ def dashboard():
         if new_host:
             add_host_to_db(new_host)
             start_monitoring_for_host(new_host)
-        return redirect("/")  # You need this to reload page after adding
+        return redirect("/")
+    
     bt_devices = get_connected_bluetooth_devices()
-    return render_template_string(TEMPLATE, statuses=status_dict, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), bt_devices=bt_devices)
+    system_info = get_system_info()
+    
+    return render_template_string(
+        TEMPLATE,
+        statuses=status_dict,
+        time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        bt_devices=bt_devices,
+        system_info=system_info
+    )
 
 @app.route("/delete/<hostname>", methods=["POST"])
 def delete_host(hostname):
