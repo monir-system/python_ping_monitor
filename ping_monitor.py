@@ -92,7 +92,7 @@ TEMPLATE = """
 <html>
 <head>
     <title>Ping Monitor Dashboard</title>
-    <meta http-equiv="refresh" content="30">
+   <!-- <meta http-equiv="refresh" content="30"> -->
     <style>
         body { font-family: Arial, sans-serif; background-color: #111; color: #eee; text-align: center; padding: 2em; }
         .host { margin: 1em; padding: 1em; border-radius: 10px; display: inline-block; width: 200px; background-color: #222; }
@@ -129,8 +129,17 @@ TEMPLATE = """
     </div>
 {% endfor %}
 
-<h2 style="text-align: left;">🔵 Connected Bluetooth Devices</h2>
+<!-- Add a button to manually refresh Bluetooth devices -->
+<h2 style="text-align: left;">🔵 Connected Bluetooth Devices [WINDOWS ONLY]</h2>
 
+<!-- Manual refresh button with timer placeholder -->
+<button id="refreshBtBtn" onclick="refreshBtDevices()" style="padding: 0.5em; background-color: #444; color: #fff; border-radius: 5px; border: none; cursor: pointer;">
+    Refresh Bluetooth Devices
+</button>
+<span id="bt-update-msg" style="margin-left: 1em; color: #4CAF50; display: none;">✅ Updated</span>
+<span id="bt-timer" style="margin-left: 1em; color: #ccc;"></span>
+
+<!-- Bluetooth devices dropdown -->
 <select id="bt-select" onchange="showBtInfo()" style="padding: 0.5em; background-color: #222; color: #eee; border-radius: 5px; border: none;">
     <option value="">-- Select a device --</option>
     {% for name, mac in bt_devices %}
@@ -138,10 +147,25 @@ TEMPLATE = """
     {% endfor %}
 </select>
 
+<!-- Bluetooth device info box -->
 <div id="bt-info" style="margin-top: 1em; background-color: #222; padding: 1em; border-radius: 10px; min-width: 200px; display: none;"></div>
 
+<div style="position: absolute; top: 10px; right: 10px; background-color: #222; padding: 1em; border-radius: 10px; text-align: left;">
+    <h3>🖥️ System Info 
+        <button onclick="refreshSystemInfo()" style="float: right; background: #444; color: #fff; border: none; padding: 0.3em 0.6em; border-radius: 5px; cursor: pointer;">⟳</button>
+    </h3>
+    <ul id="system-info-list" style="list-style: none; padding-left: 0;">
+        {% for key, value in system_info.items() %}
+            <li><strong>{{ key }}:</strong> {{ value }}</li>
+        {% endfor %}
+    </ul>
+</div>
+
 <script>
-    const btData = {{ bt_devices | tojson }};
+    let btData = [];  // Start with an empty array for Bluetooth devices
+     let btCountdown;
+
+    // Function to display Bluetooth device info when selected
     function showBtInfo() {
         const select = document.getElementById("bt-select");
         const infoBox = document.getElementById("bt-info");
@@ -156,6 +180,66 @@ TEMPLATE = """
         const [name, mac] = btData[index];
         infoBox.innerHTML = `<strong>${name}</strong><br><code>${mac}</code>`;
         infoBox.style.display = "block";
+    }
+
+    function refreshBtDevices() {
+    // Start 23s countdown timer
+    let remaining = 23;
+    const timerEl = document.getElementById("bt-timer");
+    timerEl.textContent = `⏳ ${remaining}s`;
+
+    const countdown = setInterval(() => {
+        remaining--;
+        if (remaining > 0) {
+            timerEl.textContent = `⏳ ${remaining}s`;
+        } else {
+            timerEl.textContent = "";
+            clearInterval(countdown);
+        }
+    }, 1000);
+
+    // Fetch Bluetooth devices
+    fetch("/refresh_bt", { method: "POST" })
+        .then(response => response.json())
+        .then(data => {
+            btData = data.bt_devices;
+            const btSelect = document.getElementById("bt-select");
+            btSelect.innerHTML = '<option value="">-- Select a device --</option>';
+            btData.forEach((device, index) => {
+                const option = document.createElement("option");
+                option.value = index;
+                option.textContent = device[0];
+                btSelect.appendChild(option);
+            });
+
+            // Show "Updated" message
+            const msgEl = document.getElementById("bt-update-msg");
+            msgEl.style.display = "inline";
+            setTimeout(() => {
+                msgEl.style.display = "none";
+            }, 3000); // hide after 3s
+        })
+        .catch(error => {
+            console.error("Error refreshing Bluetooth devices:", error);
+            timerEl.textContent = ""; // clear timer if fetch fails
+            clearInterval(countdown);
+        });
+}
+</script>
+<script>
+    function refreshSystemInfo() {
+        fetch("/refresh_system_info", { method: "POST" })
+            .then(res => res.json())
+            .then(data => {
+                const infoList = document.getElementById("system-info-list");
+                infoList.innerHTML = "";  // Clear current list
+                for (const [key, value] of Object.entries(data.system_info)) {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<strong>${key}:</strong> ${value}`;
+                    infoList.appendChild(li);
+                }
+            })
+            .catch(err => console.error("Failed to refresh system info:", err));
     }
 </script>
 </body>
@@ -185,14 +269,14 @@ def dashboard():
             start_monitoring_for_host(new_host)
         return redirect("/")
     
-    bt_devices = get_connected_bluetooth_devices()
+    bt_devices = []
     system_info = get_system_info()
     
     return render_template_string(
         TEMPLATE,
         statuses=status_dict,
         time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        bt_devices=bt_devices,
+        bt_devices=bt_devices,  # Empty list initially
         system_info=system_info
     )
 
@@ -207,6 +291,18 @@ def delete_host(hostname):
     status_dict.pop(hostname, None)
 
     return redirect("/")
+
+@app.route("/refresh_bt", methods=["POST"])
+def refresh_bt_devices():
+    """Handle manual refresh of Bluetooth devices."""
+    bt_devices = get_connected_bluetooth_devices()  # Get the updated list of Bluetooth devices
+    return {"bt_devices": bt_devices}  # Send the list back as JSON
+
+@app.route("/refresh_system_info", methods=["POST"])
+def refresh_system_info():
+    """Return updated system information as JSON."""
+    info = get_system_info()
+    return {"system_info": info}
 
 if __name__ == "__main__":
     init_db()
