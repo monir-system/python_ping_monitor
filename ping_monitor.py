@@ -129,16 +129,35 @@ TEMPLATE = """
     </div>
 {% endfor %}
 
-<h2>🔵 Connected Bluetooth Devices</h2>
-<ul>
-{% for name, mac in bt_devices %}
-    <li>{{ name }} — <code>{{ mac }}</code></li>
-{% else %}
-    <li>No devices connected.</li>
-{% endfor %}
-</ul>
+<h2 style="text-align: left;">🔵 Connected Bluetooth Devices</h2>
 
-    <p>Last updated: {{ time }}</p>
+<select id="bt-select" onchange="showBtInfo()" style="padding: 0.5em; background-color: #222; color: #eee; border-radius: 5px; border: none;">
+    <option value="">-- Select a device --</option>
+    {% for name, mac in bt_devices %}
+        <option value="{{ loop.index0 }}">{{ name }}</option>
+    {% endfor %}
+</select>
+
+<div id="bt-info" style="margin-top: 1em; background-color: #222; padding: 1em; border-radius: 10px; min-width: 200px; display: none;"></div>
+
+<script>
+    const btData = {{ bt_devices | tojson }};
+    function showBtInfo() {
+        const select = document.getElementById("bt-select");
+        const infoBox = document.getElementById("bt-info");
+        const index = select.value;
+
+        if (index === "") {
+            infoBox.style.display = "none";
+            infoBox.innerHTML = "";
+            return;
+        }
+
+        const [name, mac] = btData[index];
+        infoBox.innerHTML = `<strong>${name}</strong><br><code>${mac}</code>`;
+        infoBox.style.display = "block";
+    }
+</script>
 </body>
 </html>
 """
